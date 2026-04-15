@@ -191,7 +191,7 @@ export default function Game() {
       // advance level
       progress.current_level = (progress.current_level || 1) + 1;
       // If next level exists, create in_progress entry
-      const nextTask = db.tasks.find(t => t.scenario_id === scenId && t.level_number === progress.current_level);
+      const nextTask = localDb.getAllTasks().find(t => t.scenario_id === scenId && t.level_number === progress.current_level);
       if (nextTask) {
         progress.user_progress[nextTask.id] = { status: 'in_progress', started_at: Date.now(), hints_used: 0 };
       }
@@ -209,6 +209,7 @@ export default function Game() {
 
     setIsSubmitting(false);
   };
+
 
   const formatTime = (ms) => {
     if (ms == null) return "00:00";
@@ -239,7 +240,8 @@ export default function Game() {
           <h2>გილოცავთ!</h2>
           <p>თქვენ დაასრულეთ ეს სცენარი წარმატებით.</p>
           <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => navigate('/roadmap')}>გზამკვლევში დაბრუნება</button>
+            <button className="btn btn-primary" onClick={handleRestart}>თავიდან დაწყება</button>
+            <button className="btn glass-panel" style={{ color: 'var(--text-main)', border: '1px solid var(--glass-border)' }} onClick={() => navigate('/roadmap')}>გზამკვლევში დაბრუნება</button>
           </div>
         </div>
       </div>
