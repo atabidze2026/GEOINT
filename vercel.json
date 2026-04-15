@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://YOUR_BACKEND_URL/api/$1" },
-    { "source": "/uploads/(.*)", "destination": "https://YOUR_BACKEND_URL/uploads/$1" }
-  ]
-}
