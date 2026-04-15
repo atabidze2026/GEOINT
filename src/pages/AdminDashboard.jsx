@@ -11,6 +11,20 @@ export default function AdminDashboard() {
   const [newTask, setNewTask] = useState({ scenario_id: '', level_number: '', flag: '', time_limit: '', hints: ['', '', '', '', ''] });
   const [imageFile, setImageFile] = useState(null);
   const [dbStatus, setDbStatus] = useState('Checking...');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncData = async () => {
+    setIsSyncing(true);
+    try {
+      const resp = await localDb.syncToSupabase();
+      alert(resp.message);
+      await fetchData();
+    } catch (err) {
+      alert('სინქრონიზაციის შეცდომა');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   
   // For Editing Tasks
@@ -226,7 +240,17 @@ export default function AdminDashboard() {
             სტატუსი: {dbStatus}
           </p>
         </div>
-        <button className="btn btn-danger" onClick={handleLogout}>გასვლა</button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button 
+            className="btn btn-primary" 
+            onClick={handleSyncData} 
+            disabled={isSyncing}
+            style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+          >
+            {isSyncing ? 'უკავშირდება...' : 'მონაცემების სინქრონიზაცია (Sync)'}
+          </button>
+          <button className="btn btn-danger" onClick={handleLogout}>გასვლა</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>

@@ -158,6 +158,44 @@ export default {
       body: JSON.stringify({ username, password })
     });
     return await resp.json();
+  },
+
+  async syncToSupabase() {
+    if (!supabase) return { message: 'Supabase არ არის დაკავშირებული' };
+    
+    const local = loadLocalRaw();
+    const statsRaw = localStorage.getItem('osint_app_stats_v1') || '[]';
+    const localStats = JSON.parse(statsRaw);
+
+    // 1. Sync Scenarios
+    if (local.scenarios?.length > 0) {
+      await supabase.from('scenarios').upsert(local.scenarios);
+    }
+
+    // 2. Sync Tasks
+    if (local.tasks?.length > 0) {
+      // Ensure hints are JSON compatible
+      const formattedTasks = local.tasks.map(t => ({
+        ...t,
+        hints: Array.isArray(t.hints) ? t.hints : []
+      }));
+      await supabase.from('tasks').upsert(formattedTasks);
+    }
+
+    // 3. Sync Stats
+    if (localStats.length > 0) {
+      const statsToUpload = localStats.map(s => ({
+        username: s.username,
+        scenario_id: s.scenario_id,
+        points: s.points,
+        time_spent_ms: s.time_spent_ms,
+        completed_at: s.completed_at
+      }));
+      await supabase.from('user_stats').insert(statsToUpload);
+    }
+
+    return { message: 'მონაცემები წარმატებით აიტვირთა ონლაინ ბაზაში!' };
   }
 };
+
 
