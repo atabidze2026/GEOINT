@@ -16,21 +16,36 @@ export default function AdminLogin() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (localDb.verifyAdmin(username, password)) {
-      sessionStorage.setItem('adminLoggedIn', username);
-      navigate('/admin/dashboard');
-    } else {
-      alert('არასწორი პაროლი ან მომხმარებელი');
-    }
+    (async () => {
+      try {
+        const ok = await localDb.verifyAdmin(username, password);
+        if (ok) {
+          sessionStorage.setItem('adminLoggedIn', username);
+          navigate('/admin/dashboard');
+        } else {
+          alert('არასწორი პაროლი ან მომხმარებელი');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('სერვისის შეცდომა შესვლისას');
+      }
+    })();
   };
 
   const handleSetup = (e) => {
     e.preventDefault();
     if (!username || !password) return alert('შეავსეთ ყველა ველი');
     if (password !== confirm) return alert('პაროლები არ ემთხვევა');
-    localDb.setAdmin({ username, password });
-    sessionStorage.setItem('adminLoggedIn', username);
-    navigate('/admin/dashboard');
+    (async () => {
+      try {
+        await localDb.setAdmin({ username, password });
+        sessionStorage.setItem('adminLoggedIn', username);
+        navigate('/admin/dashboard');
+      } catch (err) {
+        console.error(err);
+        alert('შეცდომა ადმინისტრატორის შექმნისას');
+      }
+    })();
   };
 
   return (

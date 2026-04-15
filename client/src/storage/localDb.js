@@ -1,7 +1,31 @@
 import defaultDb from '../data/defaultDb';
+import ADMIN_SEED from './adminSeed';
 
 const STORAGE_KEY = 'osint_app_db_v1';
 const ADMIN_KEY = 'osint_app_admin_v1';
+
+// Compute SHA-256 hex digest. Uses Web Crypto API in browser, falls back to
+// Node's crypto if available (only executed at runtime when needed).
+async function hashSha256Hex(str) {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    const enc = new TextEncoder();
+    const data = enc.encode(str);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // Node fallback
+  try {
+    // require only at runtime
+    // eslint-disable-next-line global-require
+    const { createHash } = require('crypto');
+    return createHash('sha256').update(str, 'utf8').digest('hex');
+  } catch (e) {
+    // Last-resort (non-crypto) fallback — should not be used in real deployments
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+    return (h >>> 0).toString(16).padStart(64, '0');
+  }
+}
 
 function loadRaw() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -107,17 +131,32 @@ export default {
 
   // Admin
   getAdmin() {
-    try { return JSON.parse(localStorage.getItem(ADMIN_KEY)); } catch (e) { return null; }
+    try {
+      const raw = localStorage.getItem(ADMIN_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+
+    // If no admin present, seed initial admin (synchronously using the
+    // precomputed hash in `adminSeed.js`). This avoids needing to prompt for
+    // setup on first load and makes the seeded credentials available.
+    try {
+      localStorage.setItem(ADMIN_KEY, JSON.stringify(ADMIN_SEED));
+      return ADMIN_SEED;
+    } catch (e) {
+      return null;
+    }
   },
-  setAdmin({ username, password }) {
-    const admin = { username, password };
+  async setAdmin({ username, password }) {
+    const passwordHash = await hashSha256Hex(password);
+    const admin = { username, passwordHash };
     localStorage.setItem(ADMIN_KEY, JSON.stringify(admin));
     return admin;
   },
-  verifyAdmin(username, password) {
+  async verifyAdmin(username, password) {
     const admin = this.getAdmin();
     if (!admin) return false;
-    return admin.username === username && admin.password === password;
+    const passwordHash = await hashSha256Hex(password);
+    return admin.username === username && admin.passwordHash === passwordHash;
   },
 
   // Utilities
