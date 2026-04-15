@@ -195,7 +195,25 @@ export default {
     }
 
     return { message: 'მონაცემები წარმატებით აიტვირთა ონლაინ ბაზაში!' };
+  },
+
+  async clearAllData() {
+    if (supabase) {
+      // Deleting user results
+      await supabase.from('user_stats').delete().neq('id', 0);
+      // Deleting scenarios (will cascade to tasks if schema is set)
+      const { error } = await supabase.from('scenarios').delete().neq('id', 0);
+      if (error) {
+        // Fallback for tasks if cascade is not enabled
+        await supabase.from('tasks').delete().neq('id', 0);
+        await supabase.from('scenarios').delete().neq('id', 0);
+      }
+    }
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('osint_app_stats_v1');
+    return { success: true };
   }
 };
+
 
 

@@ -12,6 +12,25 @@ export default function AdminDashboard() {
   const [imageFile, setImageFile] = useState(null);
   const [dbStatus, setDbStatus] = useState('Checking...');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleClearAllData = async () => {
+    if (!window.confirm("! ყურადღება !\n\nნამდვილად გსურთ ყველა მონაცემის წაშლა? წაიშლება ყველა სცენარი, დავალება და სტატისტიკა (ონლაინ ბაზიდან და ლოკალურად).\n\nეს მოქმედება შეუქცევადია!")) {
+      return;
+    }
+    
+    setIsClearing(true);
+    try {
+      await localDb.clearAllData();
+      alert('ბაზა გასუფთავებულია!');
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+      alert('შეცდომა გასუფთავებისას');
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const handleSyncData = async () => {
     setIsSyncing(true);
@@ -248,6 +267,14 @@ export default function AdminDashboard() {
             style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
           >
             {isSyncing ? 'უკავშირდება...' : 'მონაცემების სინქრონიზაცია (Sync)'}
+          </button>
+          <button 
+            className="btn btn-danger" 
+            onClick={handleClearAllData} 
+            disabled={isClearing}
+            style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', background: '#dc2626' }}
+          >
+            {isClearing ? 'იშლება...' : 'ბაზის გასუფთავება (Wipe)'}
           </button>
           <button className="btn btn-danger" onClick={handleLogout}>გასვლა</button>
         </div>
