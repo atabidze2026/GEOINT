@@ -14,13 +14,13 @@ export default function Roadmap() {
     }
     
     // Fetch profile
-    fetch(`http://localhost:3001/api/users/${userId}`)
+    fetch(`/api/users/${userId}`)
       .then(res => res.json())
       .then(data => setUserData(data))
       .catch(err => console.error(err));
 
     // Fetch scenarios
-    fetch('http://localhost:3001/api/scenarios')
+    fetch('/api/scenarios')
       .then(res => res.json())
       .then(data => setScenarios(data))
       .catch(err => console.error(err));

@@ -32,9 +32,9 @@ export default function AdminDashboard() {
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       const [statsRes, tasksRes, scRes] = await Promise.all([
-        fetch('http://localhost:3001/api/admin/stats', { headers }),
-        fetch('http://localhost:3001/api/admin/tasks', { headers }),
-        fetch('http://localhost:3001/api/scenarios')
+        fetch('/api/admin/stats', { headers }),
+        fetch('/api/admin/tasks', { headers }),
+        fetch('/api/scenarios')
       ]);
       
       if (statsRes.status === 401) {
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
   // === Scenario Handlers ===
   const handleCreateScenario = async (e) => {
     e.preventDefault();
-    await fetch('http://localhost:3001/api/admin/scenarios', {
+    await fetch('/api/admin/scenarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(newScenario)
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
 
   const handleEditScenarioSubmit = async (e) => {
     e.preventDefault();
-    await fetch(`http://localhost:3001/api/admin/scenarios/${editingScenario.id}`, {
+    await fetch(`/api/admin/scenarios/${editingScenario.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ title: editingScenario.title, description: editingScenario.description })
@@ -75,7 +75,7 @@ export default function AdminDashboard() {
 
   const handleDeleteScenario = async (id) => {
     if (window.confirm("ნამდვილად წავშალოთ სცენარი და მისი ყველა დავალება?")) {
-      const res = await fetch(`http://localhost:3001/api/admin/scenarios/${id}`, {
+      const res = await fetch(`/api/admin/scenarios/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -105,7 +105,7 @@ export default function AdminDashboard() {
     formData.append('hints', JSON.stringify(filteredHints));
     formData.append('image', imageFile);
 
-    const res = await fetch('http://localhost:3001/api/admin/tasks', {
+    const res = await fetch('/api/admin/tasks', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
@@ -138,7 +138,7 @@ export default function AdminDashboard() {
     formData.append('hints', JSON.stringify(filteredHints));
     if (editImageFile) formData.append('image', editImageFile);
 
-    const res = await fetch(`http://localhost:3001/api/admin/tasks/${editingTask.id}`, {
+    const res = await fetch(`/api/admin/tasks/${editingTask.id}`, {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
@@ -154,7 +154,7 @@ export default function AdminDashboard() {
 
   const handleDeleteTask = async (id) => {
     if (window.confirm("ნამდვილად წავშალოთ ეს დავალება?")) {
-      const res = await fetch(`http://localhost:3001/api/admin/tasks/${id}`, {
+      const res = await fetch(`/api/admin/tasks/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -347,7 +347,7 @@ export default function AdminDashboard() {
                   <tr key={t.id}>
                     <td>{t.scenario_title}</td>
                     <td>{t.level_number}</td>
-                    <td><img src={`http://localhost:3001${t.image_path}`} alt="task" width="50" style={{ borderRadius: '4px' }} /></td>
+                    <td><img src={t.image_path} alt="task" width="50" style={{ borderRadius: '4px' }} /></td>
                     <td>{t.flag}</td>
                     <td>{t.time_limit}წთ</td>
                     <td>{getHintCount(t.hints)} ცალი</td>

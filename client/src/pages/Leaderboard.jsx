@@ -6,7 +6,7 @@ export default function Leaderboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/leaderboard')
+    fetch('/api/leaderboard')
       .then(res => res.json())
       .then(data => setUsers(data))
       .catch(err => console.error(err));

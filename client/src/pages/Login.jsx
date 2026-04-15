@@ -14,7 +14,7 @@ export default function Login() {
     e.preventDefault();
     setErrorMsg('');
 
-    const url = isRegister ? 'http://localhost:3001/api/register' : 'http://localhost:3001/api/login';
+    const url = isRegister ? '/api/register' : '/api/login';
     const body = isRegister ? { username, email, password } : { username, password };
 
     try {
