@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiUrl } from '../apiBase';
+import db from '../data/defaultDb';
 
 export default function Roadmap() {
   const [scenarios, setScenarios] = useState([]);
@@ -8,23 +8,17 @@ export default function Roadmap() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId');
+    const userId = sessionStorage.getItem('userId');
     if (!userId) {
       navigate('/');
       return;
     }
-    
-    // Fetch profile
-    fetch(apiUrl(`/api/users/${userId}`))
-      .then(res => res.json())
-      .then(data => setUserData(data))
-      .catch(err => console.error(err));
+    // Load profile from session (ephemeral)
+    const username = sessionStorage.getItem('username');
+    setUserData({ id: userId, username, points: 0, badges: '[]' });
 
-    // Fetch scenarios
-    fetch(apiUrl('/api/scenarios'))
-      .then(res => res.json())
-      .then(data => setScenarios(data))
-      .catch(err => console.error(err));
+    // Load scenarios from local bundled data
+    setScenarios(db.scenarios || []);
   }, [navigate]);
 
   const handleStart = (scenarioId) => {
@@ -32,8 +26,8 @@ export default function Roadmap() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
+    sessionStorage.removeItem('userId');
+    sessionStorage.removeItem('username');
     navigate('/');
   };
 

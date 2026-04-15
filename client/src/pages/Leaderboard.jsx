@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiUrl } from '../apiBase';
+import db from '../data/defaultDb';
 
 export default function Leaderboard() {
   const [users, setUsers] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(apiUrl('/api/leaderboard'))
-      .then(res => res.json())
-      .then(data => setUsers(data))
-      .catch(err => console.error(err));
+    // Offline: leaderboard not available. You could compute session-only stats here.
+    setUsers([]);
   }, []);
 
   return (

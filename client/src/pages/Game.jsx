@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { apiUrl } from '../apiBase';
+import db from '../data/defaultDb';
+
+// Helper for ephemeral progress stored in sessionStorage
+const getProgressKey = (userId, scenarioId) => `progress_${userId}_${scenarioId}`;
+
+function loadProgress(userId, scenarioId) {
+  const key = getProgressKey(userId, scenarioId);
+  const raw = sessionStorage.getItem(key);
+  if (raw) return JSON.parse(raw);
+  return null;
+}
+
+function saveProgress(userId, scenarioId, progress) {
+  const key = getProgressKey(userId, scenarioId);
+  sessionStorage.setItem(key, JSON.stringify(progress));
+}
+
 
 export default function Game() {
   const [task, setTask] = useState(null);
@@ -15,152 +31,183 @@ export default function Game() {
   const [successInfo, setSuccessInfo] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const userId = localStorage.getItem('userId');
+  const userId = sessionStorage.getItem('userId');
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const scenarioId = searchParams.get('scenarioId');
-
   useEffect(() => {
     if (!userId || !scenarioId) {
       navigate('/roadmap');
       return;
     }
-    syncGame();
+    syncLocalGame();
   }, [userId, scenarioId]);
 
-  const syncGame = async () => {
-    try {
-      const res = await fetch(apiUrl(`/api/sync/${scenarioId}/${userId}`));
-      const data = await res.json();
-      
-      if (data.status === 'empty_scenario') {
-        setStatus('empty_scenario');
-        return;
-      }
-      if (data.status === 'completed_all') {
-        setStatus('completed_all');
-        return;
-      }
-      if (data.status === 'game_over' || data.task === undefined) {
-        setStatus('game_over');
-        return;
-      }
+  const syncLocalGame = () => {
+    const scenId = Number(scenarioId);
+    const scen = db.scenarios.find(s => s.id === scenId);
+    if (!scen) {
+      setStatus('empty_scenario');
+      return;
+    }
 
-      setTask(data.task);
-      setScenario(data.scenario);
-      setStatus(data.status);
-      setHintsUsed(data.hintsUsed || 0);
-      setTotalHints(data.totalHintsAvailable || 0);
-      setUnlockedHints(data.unlockedHints || []);
-      setMessage('');
-      setFlag('');
-      
-      if (data.startedAt) {
-        const timeLimitMs = data.task.time_limit * 60 * 1000;
-        const endTime = data.startedAt + timeLimitMs;
-        
-        const updateTimer = () => {
-          const now = Date.now();
-          const diff = endTime - now;
-          if (diff <= 0) {
-            setTimeLeft(0);
-            setStatus('game_over');
-          } else {
-            setTimeLeft(diff);
-          }
-        };
-        updateTimer();
-        const interval = setInterval(updateTimer, 1000);
-        return () => clearInterval(interval);
-      }
-    } catch (err) {
-      console.error(err);
-      setMessage('სერვერთან კავშირი ვერ დამყარდა (Sync Failed)');
+    const tasks = db.tasks.filter(t => t.scenario_id === scenId).sort((a, b) => a.level_number - b.level_number);
+    if (tasks.length === 0) {
+      setStatus('empty_scenario');
+      return;
+    }
+
+    let progress = loadProgress(userId, scenId);
+    if (!progress) {
+      progress = { userId, scenarioId: scenId, current_level: 1, user_progress: {} };
+    }
+
+    // Ensure current level exists
+    const currentTask = tasks.find(t => t.level_number === progress.current_level);
+    if (!currentTask) {
+      setStatus('completed_all');
+      return;
+    }
+
+    if (!progress.user_progress[currentTask.id]) {
+      progress.user_progress[currentTask.id] = { status: 'in_progress', started_at: Date.now(), hints_used: 0 };
+      saveProgress(userId, scenId, progress);
+    }
+
+    const pEntry = progress.user_progress[currentTask.id];
+
+    setTask(currentTask);
+    setScenario(scen);
+    setStatus(pEntry.status || 'in_progress');
+    setHintsUsed(pEntry.hints_used || 0);
+    setTotalHints(currentTask.hints.length || 0);
+    setUnlockedHints((currentTask.hints || []).slice(0, pEntry.hints_used || 0));
+    setMessage('');
+    setFlag('');
+
+    // Timer
+    if (pEntry.started_at) {
+      const timeLimitMs = (currentTask.time_limit || 20) * 60 * 1000;
+      const endTime = pEntry.started_at + timeLimitMs;
+      const updateTimer = () => {
+        const now = Date.now();
+        const diff = endTime - now;
+        if (diff <= 0) {
+          setTimeLeft(0);
+          setStatus('game_over');
+        } else {
+          setTimeLeft(diff);
+        }
+      };
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+      return () => clearInterval(interval);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
+    sessionStorage.removeItem('userId');
+    sessionStorage.removeItem('username');
     navigate('/');
   };
 
-  const handleRestart = async () => {
-    await fetch(apiUrl('/api/restart-level'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, taskId: task?.id })
-    });
+  const handleRestart = () => {
+    if (!task) return;
+    const scenId = Number(scenarioId);
+    const progress = loadProgress(userId, scenId) || { userId, scenarioId: scenId, current_level: 1, user_progress: {} };
+    progress.user_progress[task.id] = { status: 'in_progress', started_at: Date.now(), hints_used: 0 };
+    saveProgress(userId, scenId, progress);
     setSuccessInfo(null);
-    syncGame();
+    syncLocalGame();
   };
 
-  const getNextHint = async () => {
+  const getNextHint = () => {
+    if (!task) return;
     if (hintsUsed >= totalHints) return;
-    
     const nextNum = hintsUsed + 1;
-    if (window.confirm(`ყურადღება! მინიშნება ${nextNum}-ის გახსნა დაგაკარგვინებთ 30 ქულას. გსურთ გაგრძელება?`)) {
-      const res = await fetch(apiUrl('/api/hint'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, taskId: task?.id })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setHintsUsed(data.hintsUsed);
-        setTotalHints(data.totalHintsAvailable);
-        setUnlockedHints(data.unlockedHints);
-      } else if (data.error) {
-        setMessage(data.error);
-      }
-    }
+    if (!window.confirm(`ყურადღება! მინიშნება ${nextNum}-ის გახსნა დაგაკარგვინებთ 30 ქულას. გსურთ გაგრძელება?`)) return;
+    const scenId = Number(scenarioId);
+    const progress = loadProgress(userId, scenId);
+    if (!progress) return;
+    const entry = progress.user_progress[task.id] || { status: 'in_progress', started_at: Date.now(), hints_used: 0 };
+    entry.hints_used = (entry.hints_used || 0) + 1;
+    progress.user_progress[task.id] = entry;
+    saveProgress(userId, scenId, progress);
+    setHintsUsed(entry.hints_used);
+    setUnlockedHints((task.hints || []).slice(0, entry.hints_used));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || !task) return;
     setIsSubmitting(true);
     setMessage('');
-    
-    try {
-      const res = await fetch(apiUrl('/api/submit'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, scenarioId, flag })
-      });
-      
-      const data = await res.json();
-      
-      if (res.status === 429) {
-        setMessage(data.error || 'ზედმეტად ბევრი მცდელობა. გთხოვთ მოიცადოთ 60 წამი');
-        setIsSubmitting(false);
-        return;
-      }
 
-      if (!res.ok) {
-        setMessage(data.error || 'სერვერზე მოხდა შეცდომა');
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (data.timeout) {
-        setStatus('game_over');
-      } else if (data.correct) {
-        setSuccessInfo({ points: data.points, newBadges: data.newBadges });
-        setTimeout(() => {
-          setSuccessInfo(null);
-          syncGame();
-        }, 3000);
-      } else {
-        setMessage('არასწორია (Flag Format: osint{name})');
-      }
-    } catch (err) {
-      console.error(err);
-      setMessage('სერვერთან კავშირი ვერ დამყარდა (Submit Failed)');
-    } finally {
+    const scenId = Number(scenarioId);
+    const progress = loadProgress(userId, scenId);
+    if (!progress) {
+      setMessage('პროგრესი არ არის დაარეგისტრირებული');
       setIsSubmitting(false);
+      return;
     }
+
+    const entry = progress.user_progress[task.id];
+    if (!entry || entry.status !== 'in_progress') {
+      setMessage('დავალება არ არის გააქტიურებული (მიაკითეთ გვერდი)');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const now = Date.now();
+    const elapsedMinutes = (now - entry.started_at) / 1000 / 60;
+    if (elapsedMinutes > (task.time_limit || 0)) {
+      entry.status = 'timeout';
+      progress.user_progress[task.id] = entry;
+      saveProgress(userId, scenId, progress);
+      setStatus('game_over');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const submittedFlag = (flag || '').trim().toLowerCase();
+    const dbFlag = (task.flag || '').trim().toLowerCase();
+    if (dbFlag === submittedFlag) {
+      // success
+      entry.status = 'completed';
+      entry.completed_at = now;
+      progress.user_progress[task.id] = entry;
+
+      // Points calculation
+      const hints = entry.hints_used || 0;
+      let earnedPoints = 100 - Math.floor((elapsedMinutes || 0) * 2) - (hints * 30);
+      if (isNaN(earnedPoints) || earnedPoints < 10) earnedPoints = 10;
+
+      // badges
+      const newBadges = [];
+      if (elapsedMinutes < 2 && !newBadges.includes('⚡ Speedrunner')) newBadges.push('⚡ Speedrunner');
+      if (hints === 0 && !newBadges.includes('🕵️ Ghost')) newBadges.push('🕵️ Ghost');
+
+      // advance level
+      progress.current_level = (progress.current_level || 1) + 1;
+      // If next level exists, create in_progress entry
+      const nextTask = db.tasks.find(t => t.scenario_id === scenId && t.level_number === progress.current_level);
+      if (nextTask) {
+        progress.user_progress[nextTask.id] = { status: 'in_progress', started_at: Date.now(), hints_used: 0 };
+      }
+
+      saveProgress(userId, scenId, progress);
+
+      setSuccessInfo({ points: earnedPoints, newBadges });
+      setTimeout(() => {
+        setSuccessInfo(null);
+        syncLocalGame();
+      }, 1500);
+    } else {
+      setMessage('არასწორია (Flag Format: osint{name})');
+    }
+
+    setIsSubmitting(false);
   };
 
   const formatTime = (ms) => {
@@ -218,9 +265,9 @@ export default function Game() {
     <div className="container">
       <div className="header-bar">
         <div>
-          <h2 style={{ margin: 0 }}>მოთამაშე: {localStorage.getItem('username')}</h2>
-          <p style={{ margin: 0 }}>ეტაპი {task?.level_number || 1}</p>
-        </div>
+            <h2 style={{ margin: 0 }}>მოთამაშე: {sessionStorage.getItem('username')}</h2>
+            <p style={{ margin: 0 }}>ეტაპი {task?.level_number || 1}</p>
+          </div>
         <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
           <div className="timer-text">{formatTime(timeLeft)}</div>
           <button className="btn btn-primary" onClick={() => navigate('/roadmap')}>გზამკვლევი</button>
@@ -245,7 +292,7 @@ export default function Game() {
         <div className="glass-panel" style={{ maxWidth: '800px', margin: '0 auto' }}>
           <h3>{scenario?.description || 'სად არის გადაღებული ეს ფოტო?'}</h3>
           <div style={{ width: '100%', marginBottom: '1.5rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'center' }}>
-            <img src={apiUrl(task.image_path)} alt="OSINT Task" style={{ maxWidth: '100%', display: 'block', maxHeight: '500px' }} />
+            <img src={task.image_path} alt="OSINT Task" style={{ maxWidth: '100%', display: 'block', maxHeight: '500px' }} />
           </div>
 
           <form onSubmit={handleSubmit}>
