@@ -10,6 +10,8 @@ export default function AdminDashboard() {
   const [newScenario, setNewScenario] = useState({ title: '', description: '' });
   const [newTask, setNewTask] = useState({ scenario_id: '', level_number: '', flag: '', time_limit: '', hints: ['', '', '', '', ''] });
   const [imageFile, setImageFile] = useState(null);
+  const [dbStatus, setDbStatus] = useState('Checking...');
+
   
   // For Editing Tasks
   const [editingTask, setEditingTask] = useState(null);
@@ -34,23 +36,33 @@ export default function AdminDashboard() {
       const scs = await localDb.getScenarios();
       const allTasks = await localDb.getAllTasks();
       const rawStats = await localDb.getUserStats();
+      
+      // Simple connectivity check
+      const envUrl = import.meta.env.GEO_SUPABASE_URL;
+      if (envUrl && scs.length >= 0) {
+        setDbStatus(`Online (Supabase) 🟢 - ${scs.length} სცენარი`);
+      } else {
+        setDbStatus('Offline (Local) 🟡');
+      }
 
       // Aggregate user stats
       const userAggregates = {};
-      rawStats.forEach(entry => {
-        if (!userAggregates[entry.username]) {
-          userAggregates[entry.username] = { 
-            username: entry.username, 
-            points: 0, 
-            time: 0, 
-            scenarios: new Set() 
-          };
-        }
-        const user = userAggregates[entry.username];
-        user.points += (entry.points || 0);
-        user.time += (entry.time_spent_ms || 0);
-        if (entry.scenario_id) user.scenarios.add(entry.scenario_id);
-      });
+      if (rawStats && rawStats.length > 0) {
+        rawStats.forEach(entry => {
+          if (!userAggregates[entry.username]) {
+            userAggregates[entry.username] = { 
+              username: entry.username, 
+              points: 0, 
+              time: 0, 
+              scenarios: new Set() 
+            };
+          }
+          const user = userAggregates[entry.username];
+          user.points += (entry.points || 0);
+          user.time += (entry.time_spent_ms || 0);
+          if (entry.scenario_id) user.scenarios.add(entry.scenario_id);
+        });
+      }
 
       const formattedStats = Object.values(userAggregates).map(u => ({
         ...u,
@@ -69,6 +81,7 @@ export default function AdminDashboard() {
       setScenarios(scs);
     } catch (err) {
       console.error('Fetch error:', err);
+      setDbStatus('Error (Check Console) 🔴');
     }
   };
 
@@ -207,7 +220,12 @@ export default function AdminDashboard() {
   return (
     <div className="container" style={{ maxWidth: '1400px' }}>
       <div className="header-bar">
-        <h2>Admin Dashboard</h2>
+        <div>
+          <h2 style={{ margin: 0 }}>Admin Dashboard</h2>
+          <p style={{ margin: 0, color: dbStatus.includes('Online') ? 'var(--primary)' : 'var(--danger)' }}>
+            სტატუსი: {dbStatus}
+          </p>
+        </div>
         <button className="btn btn-danger" onClick={handleLogout}>გასვლა</button>
       </div>
 
