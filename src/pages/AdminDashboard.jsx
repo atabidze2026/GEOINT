@@ -103,6 +103,7 @@ export default function AdminDashboard() {
       });
       const dataUrl = await readFileAsDataURL(imageFile);
       localDb.addTask({ scenario_id: Number(newTask.scenario_id), level_number: Number(newTask.level_number), flag: newTask.flag, time_limit: Number(newTask.time_limit), hints: filteredHints, image_path: dataUrl });
+      alert('დავალება წარმატებით დაემატა!');
       setNewTask({ scenario_id: newTask.scenario_id, level_number: '', flag: '', time_limit: '', hints: ['', '', '', '', ''] });
       setImageFile(null);
       fetchData();

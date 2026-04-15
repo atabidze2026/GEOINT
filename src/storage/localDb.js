@@ -38,7 +38,12 @@ function loadRaw() {
 }
 
 function saveRaw(db) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  } catch (e) {
+    console.error('Storage error:', e);
+    alert('შეცდომა მონაცემების შენახვისას! შესაძლოა მეხსიერება გადაივსო (სცადეთ უფრო მცირე ზომის ფოტოების ატვირთვა).');
+  }
 }
 
 function getNextId(arr) {

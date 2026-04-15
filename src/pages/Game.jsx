@@ -113,12 +113,11 @@ export default function Game() {
   };
 
   const handleRestart = () => {
-    if (!task) return;
     const scenId = Number(scenarioId);
-    const progress = loadProgress(userId, scenId) || { userId, scenarioId: scenId, current_level: 1, user_progress: {} };
-    progress.user_progress[task.id] = { status: 'in_progress', started_at: Date.now(), hints_used: 0 };
+    const progress = { userId, scenarioId: scenId, current_level: 1, user_progress: {} };
     saveProgress(userId, scenId, progress);
     setSuccessInfo(null);
+    setTask(null);
     syncLocalGame();
   };
 
