@@ -15,10 +15,13 @@ export default function Roadmap() {
     }
     // Load profile from session (ephemeral)
     const username = sessionStorage.getItem('username');
-    setUserData({ id: userId, username, points: 0, badges: '[]' });
+    setUserData({ id: userId, username, points: 0 });
 
-    // Load scenarios from local storage DB
-    setScenarios(localDb.getScenarios() || []);
+    // Load scenarios from Supabase/Local
+    (async () => {
+      const data = await localDb.getScenarios();
+      setScenarios(data || []);
+    })();
   }, [navigate]);
 
   const handleStart = (scenarioId) => {
@@ -31,7 +34,7 @@ export default function Roadmap() {
     navigate('/');
   };
 
-  const badges = userData && userData.badges ? JSON.parse(userData.badges) : [];
+
 
   return (
     <div className="container">
@@ -40,10 +43,7 @@ export default function Roadmap() {
           <h2 style={{ margin: 0 }}>OSINT-L: გზამკვლევი</h2>
           {userData && (
             <div style={{ marginTop: '0.5rem', color: 'var(--primary)' }}>
-              <strong>Points: {userData.points}</strong> | 
-              <span style={{ marginLeft: '10px' }}>
-                 მედლები: {badges.length === 0 ? 'არაა' : badges.map(b => <span key={b} title={b} style={{fontSize: '1.2rem', margin:'0 2px'}}>{b.split(' ')[0]}</span>)}
-              </span>
+              <strong>Points: {userData.points}</strong>
             </div>
           )}
         </div>

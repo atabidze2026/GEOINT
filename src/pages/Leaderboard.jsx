@@ -1,14 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-// Offline leaderboard — no backend
+import localDb from '../storage/localDb';
 
 export default function Leaderboard() {
   const [users, setUsers] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Offline: leaderboard not available. You could compute session-only stats here.
-    setUsers([]);
+    (async () => {
+      const rawStats = await localDb.getUserStats();
+      // Aggregate by username
+      const userAggregates = {};
+      rawStats.forEach(entry => {
+        if (!userAggregates[entry.username]) {
+          userAggregates[entry.username] = { username: entry.username, total_points: 0, total_time_ms: 0, completed_tasks: 0 };
+        }
+        userAggregates[entry.username].total_points += (entry.points || 0);
+        userAggregates[entry.username].total_time_ms += (entry.time_spent_ms || 0);
+        userAggregates[entry.username].completed_tasks += 1;
+      });
+
+      // Sort: Most points first, then least time
+      const sorted = Object.values(userAggregates).sort((a, b) => {
+        if (b.total_points !== a.total_points) return b.total_points - a.total_points;
+        return a.total_time_ms - b.total_time_ms;
+      });
+
+      setUsers(sorted);
+    })();
   }, []);
 
   return (
@@ -23,30 +42,27 @@ export default function Leaderboard() {
           <thead>
             <tr>
               <th>#</th>
-              <th>მომხმარებელი</th>
-              <th>მედლები</th>
-              <th>პროგრესი</th>
+              <th>მონაწილე</th>
+              <th>ეტაპები</th>
+              <th>ქულები</th>
               <th>დრო</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u, idx) => {
-              const badges = JSON.parse(u.badges || '[]');
+
               const totalMins = u.total_time_ms ? Math.floor(u.total_time_ms / 60000) : 0;
               const totalSecs = u.total_time_ms ? Math.floor((u.total_time_ms % 60000) / 1000) : 0;
               return (
-                <tr key={u.id}>
+                <tr key={idx}>
                   <td style={{ fontSize: '1.2rem', fontWeight: 'bold', color: idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? '#cd7f32' : 'var(--text-main)' }}>
                     {idx + 1}
                   </td>
                   <td style={{ fontSize: '1.1rem' }}>{u.username}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      {badges.map((b, i) => <span key={i} title={b} style={{ fontSize: '1.5rem' }}>{b.split(' ')[0]}</span>)}
-                    </div>
-                  </td>
-                  <td style={{ fontWeight: '500' }}>{u.completed_tasks} ეტაპი</td>
-                  <td style={{ color: 'var(--primary)', fontWeight: 'bold' }}>
+
+                  <td style={{ fontWeight: '500' }}>{u.completed_tasks}</td>
+                  <td style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{u.total_points} PT</td>
+                  <td style={{ opacity: 0.8 }}>
                     {u.total_time_ms ? `${totalMins}წთ ${totalSecs}წმ` : '---'}
                   </td>
                 </tr>

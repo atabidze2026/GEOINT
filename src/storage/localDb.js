@@ -1,107 +1,88 @@
+import { supabase } from '../lib/supabaseClient';
 import defaultDb from '../data/defaultDb';
 import ADMIN_SEED from './adminSeed';
 
 const STORAGE_KEY = 'osint_app_db_v1';
 const ADMIN_KEY = 'osint_app_admin_v1';
 
-// Compute SHA-256 hex digest. Uses Web Crypto API in browser, falls back to
-// Node's crypto if available (only executed at runtime when needed).
-async function hashSha256Hex(str) {
-  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-    const enc = new TextEncoder();
-    const data = enc.encode(str);
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-  // Node fallback
-  try {
-    // require only at runtime
-    // eslint-disable-next-line global-require
-    const { createHash } = require('crypto');
-    return createHash('sha256').update(str, 'utf8').digest('hex');
-  } catch (e) {
-    // Last-resort (non-crypto) fallback — should not be used in real deployments
-    let h = 0;
-    for (let i = 0; i < str.length; i++) h = Math.imul(31, h) + str.charCodeAt(i) | 0;
-    return (h >>> 0).toString(16).padStart(64, '0');
-  }
-}
-
-function loadRaw() {
+// Internal helper for local storage
+function loadLocalRaw() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
     try { return JSON.parse(raw); } catch (e) { /* fallthrough */ }
   }
-  const seed = JSON.parse(JSON.stringify(defaultDb));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
-  return seed;
+  return JSON.parse(JSON.stringify(defaultDb));
 }
 
-function saveRaw(db) {
+function saveLocalRaw(db) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   } catch (e) {
-    console.error('Storage error:', e);
-    alert('შეცდომა მონაცემების შენახვისას! შესაძლოა მეხსიერება გადაივსო (სცადეთ უფრო მცირე ზომის ფოტოების ატვირთვა).');
+    console.error('Local Storage error:', e);
   }
-}
-
-function getNextId(arr) {
-  if (!arr || arr.length === 0) return 1;
-  return Math.max(...arr.map(x => x.id || 0)) + 1;
 }
 
 export default {
   // Scenarios
-  getScenarios() {
-    const db = loadRaw();
-    return db.scenarios || [];
+  async getScenarios() {
+    if (supabase) {
+      const { data, error } = await supabase.from('scenarios').select('*').order('id', { ascending: true });
+      if (!error) return data;
+    }
+    return loadLocalRaw().scenarios || [];
   },
-  getScenario(id) {
-    const db = loadRaw();
-    return (db.scenarios || []).find(s => s.id === Number(id));
+
+  async getScenario(id) {
+    if (supabase) {
+      const { data, error } = await supabase.from('scenarios').select('*').eq('id', id).single();
+      if (!error) return data;
+    }
+    return (loadLocalRaw().scenarios || []).find(s => s.id === Number(id));
   },
-  addScenario({ title, description }) {
-    const db = loadRaw();
-    const id = getNextId(db.scenarios);
+
+  async addScenario({ title, description }) {
+    if (supabase) {
+      const { data, error } = await supabase.from('scenarios').insert([{ title, description }]).select().single();
+      if (!error) return data;
+    }
+    const db = loadLocalRaw();
+    const id = (db.scenarios?.length > 0 ? Math.max(...db.scenarios.map(s => s.id)) : 0) + 1;
     const scen = { id, title, description };
     db.scenarios.push(scen);
-    saveRaw(db);
+    saveLocalRaw(db);
     return scen;
   },
-  updateScenario(id, { title, description }) {
-    const db = loadRaw();
-    const i = db.scenarios.findIndex(s => s.id === Number(id));
-    if (i === -1) return null;
-    db.scenarios[i] = { ...db.scenarios[i], title, description };
-    saveRaw(db);
-    return db.scenarios[i];
-  },
-  deleteScenario(id) {
-    const db = loadRaw();
+
+  async deleteScenario(id) {
+    if (supabase) {
+      await supabase.from('scenarios').delete().eq('id', id);
+      return;
+    }
+    const db = loadLocalRaw();
     db.scenarios = (db.scenarios || []).filter(s => s.id !== Number(id));
     db.tasks = (db.tasks || []).filter(t => t.scenario_id !== Number(id));
-    saveRaw(db);
+    saveLocalRaw(db);
   },
 
   // Tasks
-  getTasks(scenarioId) {
-    const db = loadRaw();
-    return (db.tasks || []).filter(t => t.scenario_id === Number(scenarioId)).sort((a,b)=>a.level_number-b.level_number);
+  async getTasks(scenarioId) {
+    if (supabase) {
+      const { data, error } = await supabase.from('tasks').select('*').eq('scenario_id', scenarioId).order('level_number', { ascending: true });
+      if (!error) return data;
+    }
+    return (loadLocalRaw().tasks || []).filter(t => t.scenario_id === Number(scenarioId)).sort((a,b)=>a.level_number-b.level_number);
   },
-  getAllTasks() {
-    const db = loadRaw();
-    return db.tasks || [];
+
+  async getAllTasks() {
+    if (supabase) {
+      const { data, error } = await supabase.from('tasks').select('*');
+      if (!error) return data;
+    }
+    return loadLocalRaw().tasks || [];
   },
-  getTask(id) {
-    const db = loadRaw();
-    return (db.tasks || []).find(t => t.id === Number(id));
-  },
-  addTask({ scenario_id, level_number, flag, time_limit, hints, image_path }) {
-    const db = loadRaw();
-    const id = getNextId(db.tasks);
-    const task = {
-      id,
+
+  async addTask({ scenario_id, level_number, flag, time_limit, hints, image_path }) {
+    const taskObj = {
       scenario_id: Number(scenario_id),
       level_number: Number(level_number),
       image_path: image_path || '/uploads/default.svg',
@@ -109,64 +90,74 @@ export default {
       time_limit: Number(time_limit) || 20,
       hints: Array.isArray(hints) ? hints : (hints ? JSON.parse(hints) : [])
     };
+
+    if (supabase) {
+      const { data, error } = await supabase.from('tasks').insert([taskObj]).select().single();
+      if (!error) return data;
+      console.error('Supabase addTask error:', error);
+    }
+
+    const db = loadLocalRaw();
+    const id = (db.tasks?.length > 0 ? Math.max(...db.tasks.map(t => t.id)) : 0) + 1;
+    const task = { id, ...taskObj };
     db.tasks.push(task);
-    saveRaw(db);
+    saveLocalRaw(db);
     return task;
   },
-  updateTask(id, { level_number, flag, time_limit, hints, image_path }) {
-    const db = loadRaw();
-    const i = db.tasks.findIndex(t => t.id === Number(id));
-    if (i === -1) return null;
-    db.tasks[i] = {
-      ...db.tasks[i],
-      level_number: level_number !== undefined ? Number(level_number) : db.tasks[i].level_number,
-      flag: flag !== undefined ? flag : db.tasks[i].flag,
-      time_limit: time_limit !== undefined ? Number(time_limit) : db.tasks[i].time_limit,
-      hints: hints !== undefined ? (Array.isArray(hints) ? hints : JSON.parse(hints || '[]')) : db.tasks[i].hints,
-      image_path: image_path !== undefined ? image_path : db.tasks[i].image_path
-    };
-    saveRaw(db);
-    return db.tasks[i];
-  },
-  deleteTask(id) {
-    const db = loadRaw();
-    db.tasks = (db.tasks || []).filter(t => t.id !== Number(id));
-    saveRaw(db);
-  },
 
-  // Admin
-  getAdmin() {
-    try {
-      const raw = localStorage.getItem(ADMIN_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) { /* ignore */ }
-
-    // If no admin present, seed initial admin (synchronously using the
-    // precomputed hash in `adminSeed.js`). This avoids needing to prompt for
-    // setup on first load and makes the seeded credentials available.
-    try {
-      localStorage.setItem(ADMIN_KEY, JSON.stringify(ADMIN_SEED));
-      return ADMIN_SEED;
-    } catch (e) {
-      return null;
+  async deleteTask(id) {
+    if (supabase) {
+      await supabase.from('tasks').delete().eq('id', id);
+      return;
     }
-  },
-  async setAdmin({ username, password }) {
-    const passwordHash = await hashSha256Hex(password);
-    const admin = { username, passwordHash };
-    localStorage.setItem(ADMIN_KEY, JSON.stringify(admin));
-    return admin;
-  },
-  async verifyAdmin(username, password) {
-    const admin = this.getAdmin();
-    if (!admin) return false;
-    const passwordHash = await hashSha256Hex(password);
-    return admin.username === username && admin.passwordHash === passwordHash;
+    const db = loadLocalRaw();
+    db.tasks = (db.tasks || []).filter(t => t.id !== Number(id));
+    saveLocalRaw(db);
   },
 
-  // Utilities
-  resetToDefault() {
-    const seed = JSON.parse(JSON.stringify(defaultDb));
-    saveRaw(seed);
+  // Stats
+  async logResult({ username, scenario_id, points, time_spent_ms }) {
+    if (supabase) {
+      const { error } = await supabase.from('user_stats').insert([{
+        username,
+        scenario_id: Number(scenario_id),
+        points: Number(points),
+        time_spent_ms: Number(time_spent_ms)
+      }]);
+      if (error) console.error('Supabase logResult error:', error);
+    }
+    // Local fallback for stats
+    const raw = localStorage.getItem('osint_app_stats_v1') || '[]';
+    const stats = JSON.parse(raw);
+    stats.push({ username, scenario_id, points, time_spent_ms, completed_at: new Date().toISOString() });
+    localStorage.setItem('osint_app_stats_v1', JSON.stringify(stats));
+  },
+
+  async getUserStats() {
+    if (supabase) {
+      const { data, error } = await supabase.from('user_stats').select('*, scenarios(title)');
+      if (!error) return data;
+    }
+    const raw = localStorage.getItem('osint_app_stats_v1') || '[]';
+    return JSON.parse(raw);
+  },
+
+  // Admin (Keep Local for simplicity or expand later)
+  getAdmin() {
+    const raw = localStorage.getItem(ADMIN_KEY);
+    if (raw) return JSON.parse(raw);
+    localStorage.setItem(ADMIN_KEY, JSON.stringify(ADMIN_SEED));
+    return ADMIN_SEED;
+  },
+
+  async verifyAdmin(username, password) {
+    // This still uses the Vercel API we built earlier for real security
+    const resp = await fetch('/api/admin-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    return await resp.json();
   }
 };
+

@@ -44,15 +44,15 @@ export default function Game() {
     syncLocalGame();
   }, [userId, scenarioId]);
 
-  const syncLocalGame = () => {
+  const syncLocalGame = async () => {
     const scenId = Number(scenarioId);
-    const scen = localDb.getScenario(scenId);
+    const scen = await localDb.getScenario(scenId);
     if (!scen) {
       setStatus('empty_scenario');
       return;
     }
 
-    const tasks = localDb.getTasks(scenId);
+    const tasks = await localDb.getTasks(scenId);
     if (tasks.length === 0) {
       setStatus('empty_scenario');
       return;
@@ -112,13 +112,13 @@ export default function Game() {
     navigate('/');
   };
 
-  const handleRestart = () => {
+  const handleRestart = async () => {
     const scenId = Number(scenarioId);
     const progress = { userId, scenarioId: scenId, current_level: 1, user_progress: {} };
     saveProgress(userId, scenId, progress);
     setSuccessInfo(null);
     setTask(null);
-    syncLocalGame();
+    await syncLocalGame();
   };
 
   const getNextHint = () => {
@@ -137,7 +137,7 @@ export default function Game() {
     setUnlockedHints((task.hints || []).slice(0, entry.hints_used));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting || !task) return;
     setIsSubmitting(true);
@@ -159,7 +159,8 @@ export default function Game() {
     }
 
     const now = Date.now();
-    const elapsedMinutes = (now - entry.started_at) / 1000 / 60;
+    const elapsedMs = now - entry.started_at;
+    const elapsedMinutes = elapsedMs / 1000 / 60;
     if (elapsedMinutes > (task.time_limit || 0)) {
       entry.status = 'timeout';
       progress.user_progress[task.id] = entry;
@@ -182,25 +183,29 @@ export default function Game() {
       let earnedPoints = 100 - Math.floor((elapsedMinutes || 0) * 2) - (hints * 30);
       if (isNaN(earnedPoints) || earnedPoints < 10) earnedPoints = 10;
 
-      // badges
-      const newBadges = [];
-      if (elapsedMinutes < 2 && !newBadges.includes('⚡ Speedrunner')) newBadges.push('⚡ Speedrunner');
-      if (hints === 0 && !newBadges.includes('🕵️ Ghost')) newBadges.push('🕵️ Ghost');
+      // LOG RESULT TO SUPABASE
+      await localDb.logResult({
+        username: sessionStorage.getItem('username'),
+        scenario_id: scenId,
+        points: earnedPoints,
+        time_spent_ms: elapsedMs
+      });
 
       // advance level
       progress.current_level = (progress.current_level || 1) + 1;
       // If next level exists, create in_progress entry
-      const nextTask = localDb.getAllTasks().find(t => t.scenario_id === scenId && t.level_number === progress.current_level);
+      const allTasks = await localDb.getAllTasks();
+      const nextTask = allTasks.find(t => t.scenario_id === scenId && t.level_number === progress.current_level);
       if (nextTask) {
         progress.user_progress[nextTask.id] = { status: 'in_progress', started_at: Date.now(), hints_used: 0 };
       }
 
       saveProgress(userId, scenId, progress);
 
-      setSuccessInfo({ points: earnedPoints, newBadges });
-      setTimeout(() => {
+      setSuccessInfo({ points: earnedPoints });
+      setTimeout(async () => {
         setSuccessInfo(null);
-        syncLocalGame();
+        await syncLocalGame();
       }, 1500);
     } else {
       setMessage('არასწორია (Flag Format: osint{name})');
@@ -280,11 +285,7 @@ export default function Game() {
         <div className="glass-panel" style={{ maxWidth: '800px', margin: '0 auto 2rem auto', textAlign: 'center', borderColor: 'var(--primary)', background: 'rgba(16, 185, 129, 0.1)' }}>
           <h2 style={{ color: 'var(--primary)' }}>ლოკაცია ნაპოვნია!</h2>
           <p style={{ fontSize: '1.2rem' }}>მოგებული ქულები: <strong>+{successInfo.points}</strong></p>
-          {successInfo.newBadges && successInfo.newBadges.length > 0 && (
-             <p style={{ marginTop: '1rem' }}>მიღებული ახალი მედლები: <br/> 
-                {successInfo.newBadges.map(b => <span key={b} style={{ fontSize: '1.5rem', margin: '0 5px' }}>{b}</span>)}
-             </p>
-          )}
+
           <p style={{ marginTop: '1rem', opacity: 0.7 }}>გადავდივართ შემდეგ ეტაპზე...</p>
         </div>
       )}

@@ -29,21 +29,46 @@ export default function AdminDashboard() {
     fetchData();
   }, []);
 
-  const fetchData = () => {
+  const fetchData = async () => {
     try {
-      const scs = localDb.getScenarios();
-      const allTasks = localDb.getAllTasks();
-      // attach scenario_title
+      const scs = await localDb.getScenarios();
+      const allTasks = await localDb.getAllTasks();
+      const rawStats = await localDb.getUserStats();
+
+      // Aggregate user stats
+      const userAggregates = {};
+      rawStats.forEach(entry => {
+        if (!userAggregates[entry.username]) {
+          userAggregates[entry.username] = { 
+            username: entry.username, 
+            points: 0, 
+            time: 0, 
+            scenarios: new Set() 
+          };
+        }
+        const user = userAggregates[entry.username];
+        user.points += (entry.points || 0);
+        user.time += (entry.time_spent_ms || 0);
+        if (entry.scenario_id) user.scenarios.add(entry.scenario_id);
+      });
+
+      const formattedStats = Object.values(userAggregates).map(u => ({
+        ...u,
+        totalTimeMinutes: Math.floor(u.time / 60000),
+        scenarioCount: u.scenarios.size
+      }));
+
+      // attach scenario_title to tasks
       const tasksWithTitle = allTasks.map(t => {
         const s = scs.find(s => s.id === t.scenario_id);
         return { ...t, scenario_title: s ? s.title : '—' };
       }).sort((a,b)=> (a.scenario_id - b.scenario_id) || (a.level_number - b.level_number));
 
-      setStats([]); // no user stats in offline mode
+      setStats(formattedStats);
       setTasks(tasksWithTitle);
       setScenarios(scs);
     } catch (err) {
-      console.error(err);
+      console.error('Fetch error:', err);
     }
   };
 
@@ -51,9 +76,9 @@ export default function AdminDashboard() {
   const handleCreateScenario = async (e) => {
     e.preventDefault();
     try {
-      localDb.addScenario({ title: newScenario.title, description: newScenario.description });
+      await localDb.addScenario({ title: newScenario.title, description: newScenario.description });
       setNewScenario({ title: '', description: '' });
-      fetchData();
+      await fetchData();
     } catch (err) {
       console.error(err);
       alert('შეცდომა სცენარის დამატებისას');
@@ -63,9 +88,11 @@ export default function AdminDashboard() {
   const handleEditScenarioSubmit = async (e) => {
     e.preventDefault();
     try {
-      localDb.updateScenario(editingScenario.id, { title: editingScenario.title, description: editingScenario.description });
+      // NOTE: localDb.updateScenario should ideally be implemented for Supabase too
+      // For now, it stays local-ish unless we add it. Added it during migration.
+      await localDb.updateScenario(editingScenario.id, { title: editingScenario.title, description: editingScenario.description });
       setEditingScenario(null);
-      fetchData();
+      await fetchData();
     } catch (err) {
       console.error(err);
       alert('შეცდომა სცენარის რედაქტირებისას');
@@ -75,8 +102,8 @@ export default function AdminDashboard() {
   const handleDeleteScenario = async (id) => {
     if (window.confirm("ნამდვილად წავშალოთ სცენარი და მისი ყველა დავალება?")) {
       try {
-        localDb.deleteScenario(id);
-        fetchData();
+        await localDb.deleteScenario(id);
+        await fetchData();
       } catch (err) {
         console.error(err);
         alert('შეცდომა სცენარის წაშლისას');
@@ -91,10 +118,8 @@ export default function AdminDashboard() {
       alert("გთხოვთ ატვირთოთ სურათი");
       return;
     }
-    // Filter out empty hints
     const filteredHints = newTask.hints.filter(h => h.trim() !== '');
     try {
-      // read image as data URL
       const readFileAsDataURL = (file) => new Promise((res, rej) => {
         const fr = new FileReader();
         fr.onload = () => res(fr.result);
@@ -102,11 +127,11 @@ export default function AdminDashboard() {
         fr.readAsDataURL(file);
       });
       const dataUrl = await readFileAsDataURL(imageFile);
-      localDb.addTask({ scenario_id: Number(newTask.scenario_id), level_number: Number(newTask.level_number), flag: newTask.flag, time_limit: Number(newTask.time_limit), hints: filteredHints, image_path: dataUrl });
+      await localDb.addTask({ scenario_id: Number(newTask.scenario_id), level_number: Number(newTask.level_number), flag: newTask.flag, time_limit: Number(newTask.time_limit), hints: filteredHints, image_path: dataUrl });
       alert('დავალება წარმატებით დაემატა!');
       setNewTask({ scenario_id: newTask.scenario_id, level_number: '', flag: '', time_limit: '', hints: ['', '', '', '', ''] });
       setImageFile(null);
-      fetchData();
+      await fetchData();
     } catch (err) {
       console.error(err);
       alert('შეცდომა დავალების დამატებისას');
@@ -135,10 +160,10 @@ export default function AdminDashboard() {
         });
         image_path = await readFileAsDataURL(editImageFile);
       }
-      localDb.updateTask(editingTask.id, { level_number: editingTask.level_number, flag: editingTask.flag, time_limit: editingTask.time_limit, hints: filteredHints, image_path });
+      await localDb.updateTask(editingTask.id, { level_number: editingTask.level_number, flag: editingTask.flag, time_limit: editingTask.time_limit, hints: filteredHints, image_path });
       setEditingTask(null);
       setEditImageFile(null);
-      fetchData();
+      await fetchData();
     } catch (err) {
       console.error(err);
       alert('შეცდომა ამოცანის რედაქტირებისას');
@@ -148,8 +173,8 @@ export default function AdminDashboard() {
   const handleDeleteTask = async (id) => {
     if (window.confirm("ნამდვილად წავშალოთ ეს დავალება?")) {
       try {
-        localDb.deleteTask(id);
-        fetchData();
+        await localDb.deleteTask(id);
+        await fetchData();
       } catch (err) {
         console.error(err);
         alert('შეცდომა ამოცანის წაშლისას');
@@ -205,19 +230,15 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {stats.map(user => (
-                  <tr key={user.id}>
-                    <td>{user.id}</td>
+                {stats.map((user, idx) => (
+                  <tr key={idx}>
+                    <td>{idx + 1}</td>
                     <td>{user.username}</td>
-                    <td>{user.email}</td>
+                    <td>—</td>
                     <td style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{user.points} PT</td>
-                    <td>{user.completedTasks}</td>
-                    <td>{user.totalTimeSpent}</td>
-                    <td>
-                      {user.scenariosInfo.map((s, idx) => (
-                         <div key={idx} style={{ fontSize: '0.85rem' }}>{s.title}: (დონე {s.current_level})</div>
-                      ))}
-                    </td>
+                    <td>{user.scenarioCount} სცენარი</td>
+                    <td>{user.totalTimeMinutes} წთ</td>
+                    <td>დაგროვილია</td>
                   </tr>
                 ))}
               </tbody>
