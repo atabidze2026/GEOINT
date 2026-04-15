@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -296,8 +296,9 @@ app.post('/api/submit', submitLimiter, (req, res) => {
 // === ADMIN APIs ===
 
 const checkAdmin = (req, res, next) => {
-    const auth = req.headers.authorization;
-    if (auth === 'Bearer admin123') {
+    const auth = req.headers.authorization || '';
+    const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin123';
+    if (auth === `Bearer ${ADMIN_TOKEN}`) {
         next();
     } else {
         res.status(401).json({ error: 'Unauthorized' });
@@ -306,8 +307,11 @@ const checkAdmin = (req, res, next) => {
 
 app.post('/api/admin/login', (req, res) => {
     const { username, password } = req.body;
-    if (username === 'admin' && password === 'admin') {
-        res.json({ token: 'admin123' });
+    const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+    const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin123';
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        res.json({ token: ADMIN_TOKEN });
     } else {
         res.status(401).json({ error: 'Invalid credentials' });
     }

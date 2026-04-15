@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { apiUrl } from '../apiBase';
 
 export default function Game() {
   const [task, setTask] = useState(null);
@@ -30,7 +31,7 @@ export default function Game() {
 
   const syncGame = async () => {
     try {
-      const res = await fetch(`/api/sync/${scenarioId}/${userId}`);
+      const res = await fetch(apiUrl(`/api/sync/${scenarioId}/${userId}`));
       const data = await res.json();
       
       if (data.status === 'empty_scenario') {
@@ -86,7 +87,7 @@ export default function Game() {
   };
 
   const handleRestart = async () => {
-    await fetch('/api/restart-level', {
+    await fetch(apiUrl('/api/restart-level'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, taskId: task?.id })
@@ -100,7 +101,7 @@ export default function Game() {
     
     const nextNum = hintsUsed + 1;
     if (window.confirm(`ყურადღება! მინიშნება ${nextNum}-ის გახსნა დაგაკარგვინებთ 30 ქულას. გსურთ გაგრძელება?`)) {
-      const res = await fetch('/api/hint', {
+      const res = await fetch(apiUrl('/api/hint'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, taskId: task?.id })
@@ -123,7 +124,7 @@ export default function Game() {
     setMessage('');
     
     try {
-      const res = await fetch('/api/submit', {
+      const res = await fetch(apiUrl('/api/submit'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, scenarioId, flag })
@@ -244,7 +245,7 @@ export default function Game() {
         <div className="glass-panel" style={{ maxWidth: '800px', margin: '0 auto' }}>
           <h3>{scenario?.description || 'სად არის გადაღებული ეს ფოტო?'}</h3>
           <div style={{ width: '100%', marginBottom: '1.5rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'center' }}>
-            <img src={task.image_path} alt="OSINT Task" style={{ maxWidth: '100%', display: 'block', maxHeight: '500px' }} />
+            <img src={apiUrl(task.image_path)} alt="OSINT Task" style={{ maxWidth: '100%', display: 'block', maxHeight: '500px' }} />
           </div>
 
           <form onSubmit={handleSubmit}>

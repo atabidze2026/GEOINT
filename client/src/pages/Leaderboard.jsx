@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl } from '../apiBase';
 
 export default function Leaderboard() {
   const [users, setUsers] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('/api/leaderboard')
+    fetch(apiUrl('/api/leaderboard'))
       .then(res => res.json())
       .then(data => setUsers(data))
       .catch(err => console.error(err));

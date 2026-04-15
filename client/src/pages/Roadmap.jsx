@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl } from '../apiBase';
 
 export default function Roadmap() {
   const [scenarios, setScenarios] = useState([]);
@@ -14,13 +15,13 @@ export default function Roadmap() {
     }
     
     // Fetch profile
-    fetch(`/api/users/${userId}`)
+    fetch(apiUrl(`/api/users/${userId}`))
       .then(res => res.json())
       .then(data => setUserData(data))
       .catch(err => console.error(err));
 
     // Fetch scenarios
-    fetch('/api/scenarios')
+    fetch(apiUrl('/api/scenarios'))
       .then(res => res.json())
       .then(data => setScenarios(data))
       .catch(err => console.error(err));
