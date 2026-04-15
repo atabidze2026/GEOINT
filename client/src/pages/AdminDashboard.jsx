@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiUrl } from '../apiBase';
+import localDb from '../storage/localDb';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState([]);
@@ -18,34 +18,30 @@ export default function AdminDashboard() {
   // For Editing Scenarios
   const [editingScenario, setEditingScenario] = useState(null);
 
-  const token = localStorage.getItem('adminToken');
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!token) {
+    const admin = sessionStorage.getItem('adminLoggedIn');
+    if (!admin) {
       navigate('/admin');
       return;
     }
     fetchData();
-  }, [token]);
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = () => {
     try {
-      const headers = { 'Authorization': `Bearer ${token}` };
-      const [statsRes, tasksRes, scRes] = await Promise.all([
-        fetch(apiUrl('/api/admin/stats'), { headers }),
-        fetch(apiUrl('/api/admin/tasks'), { headers }),
-        fetch(apiUrl('/api/scenarios'))
-      ]);
-      
-      if (statsRes.status === 401) {
-        navigate('/admin');
-        return;
-      }
+      const scs = localDb.getScenarios();
+      const allTasks = localDb.getAllTasks();
+      // attach scenario_title
+      const tasksWithTitle = allTasks.map(t => {
+        const s = scs.find(s => s.id === t.scenario_id);
+        return { ...t, scenario_title: s ? s.title : '—' };
+      }).sort((a,b)=> (a.scenario_id - b.scenario_id) || (a.level_number - b.level_number));
 
-      setStats(await statsRes.json());
-      setTasks(await tasksRes.json());
-      setScenarios(await scRes.json());
+      setStats([]); // no user stats in offline mode
+      setTasks(tasksWithTitle);
+      setScenarios(scs);
     } catch (err) {
       console.error(err);
     }
@@ -54,37 +50,37 @@ export default function AdminDashboard() {
   // === Scenario Handlers ===
   const handleCreateScenario = async (e) => {
     e.preventDefault();
-    await fetch(apiUrl('/api/admin/scenarios'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify(newScenario)
-    });
-    setNewScenario({ title: '', description: '' });
-    fetchData();
+    try {
+      localDb.addScenario({ title: newScenario.title, description: newScenario.description });
+      setNewScenario({ title: '', description: '' });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      alert('შეცდომა სცენარის დამატებისას');
+    }
   };
 
   const handleEditScenarioSubmit = async (e) => {
     e.preventDefault();
-    await fetch(apiUrl(`/api/admin/scenarios/${editingScenario.id}`), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ title: editingScenario.title, description: editingScenario.description })
-    });
-    setEditingScenario(null);
-    fetchData();
+    try {
+      localDb.updateScenario(editingScenario.id, { title: editingScenario.title, description: editingScenario.description });
+      setEditingScenario(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      alert('შეცდომა სცენარის რედაქტირებისას');
+    }
   };
 
   const handleDeleteScenario = async (id) => {
     if (window.confirm("ნამდვილად წავშალოთ სცენარი და მისი ყველა დავალება?")) {
-      const res = await fetch(apiUrl(`/api/admin/scenarios/${id}`), {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        alert('შეცდომა: ' + (data.error || 'Unknown error'));
+      try {
+        localDb.deleteScenario(id);
+        fetchData();
+      } catch (err) {
+        console.error(err);
+        alert('შეცდომა სცენარის წაშლისას');
       }
-      fetchData();
     }
   };
 
@@ -97,27 +93,23 @@ export default function AdminDashboard() {
     }
     // Filter out empty hints
     const filteredHints = newTask.hints.filter(h => h.trim() !== '');
-
-    const formData = new FormData();
-    formData.append('scenario_id', newTask.scenario_id);
-    formData.append('level_number', newTask.level_number);
-    formData.append('flag', newTask.flag);
-    formData.append('time_limit', newTask.time_limit);
-    formData.append('hints', JSON.stringify(filteredHints));
-    formData.append('image', imageFile);
-
-    const res = await fetch(apiUrl('/api/admin/tasks'), {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      alert('შეცდომა: ' + (data.error || 'Unknown error'));
+    try {
+      // read image as data URL
+      const readFileAsDataURL = (file) => new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.onerror = rej;
+        fr.readAsDataURL(file);
+      });
+      const dataUrl = await readFileAsDataURL(imageFile);
+      localDb.addTask({ scenario_id: Number(newTask.scenario_id), level_number: Number(newTask.level_number), flag: newTask.flag, time_limit: Number(newTask.time_limit), hints: filteredHints, image_path: dataUrl });
+      setNewTask({ scenario_id: newTask.scenario_id, level_number: '', flag: '', time_limit: '', hints: ['', '', '', '', ''] });
+      setImageFile(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      alert('შეცდომა დავალების დამატებისას');
     }
-    setNewTask({ scenario_id: newTask.scenario_id, level_number: '', flag: '', time_limit: '', hints: ['', '', '', '', ''] });
-    setImageFile(null);
-    fetchData();
   };
 
   const startEditTask = (t) => {
@@ -131,44 +123,41 @@ export default function AdminDashboard() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     const filteredHints = editingTask.hintsArray.filter(h => h.trim() !== '');
-
-    const formData = new FormData();
-    formData.append('level_number', editingTask.level_number);
-    formData.append('flag', editingTask.flag);
-    formData.append('time_limit', editingTask.time_limit);
-    formData.append('hints', JSON.stringify(filteredHints));
-    if (editImageFile) formData.append('image', editImageFile);
-
-    const res = await fetch(apiUrl(`/api/admin/tasks/${editingTask.id}`), {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      alert('შეცდომა: ' + (data.error || 'Unknown error'));
+    try {
+      let image_path = editingTask.image_path;
+      if (editImageFile) {
+        const readFileAsDataURL = (file) => new Promise((res, rej) => {
+          const fr = new FileReader();
+          fr.onload = () => res(fr.result);
+          fr.onerror = rej;
+          fr.readAsDataURL(file);
+        });
+        image_path = await readFileAsDataURL(editImageFile);
+      }
+      localDb.updateTask(editingTask.id, { level_number: editingTask.level_number, flag: editingTask.flag, time_limit: editingTask.time_limit, hints: filteredHints, image_path });
+      setEditingTask(null);
+      setEditImageFile(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      alert('შეცდომა ამოცანის რედაქტირებისას');
     }
-    setEditingTask(null);
-    setEditImageFile(null);
-    fetchData();
   };
 
   const handleDeleteTask = async (id) => {
     if (window.confirm("ნამდვილად წავშალოთ ეს დავალება?")) {
-      const res = await fetch(apiUrl(`/api/admin/tasks/${id}`), {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        alert('შეცდომა: ' + (data.error || 'Unknown error'));
+      try {
+        localDb.deleteTask(id);
+        fetchData();
+      } catch (err) {
+        console.error(err);
+        alert('შეცდომა ამოცანის წაშლისას');
       }
-      fetchData();
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminLoggedIn');
     navigate('/admin');
   };
 
@@ -185,10 +174,8 @@ export default function AdminDashboard() {
     setEditingTask({ ...editingTask, hintsArray: copy });
   };
 
-  const getHintCount = (hintsJson) => {
-    try {
-      return JSON.parse(hintsJson || '[]').filter(h => h.trim() !== '').length;
-    } catch(e) { return 0; }
+  const getHintCount = (hints) => {
+    try { return (Array.isArray(hints) ? hints : []).filter(h => h && h.trim() !== '').length; } catch(e) { return 0; }
   };
 
   return (
@@ -348,7 +335,7 @@ export default function AdminDashboard() {
                   <tr key={t.id}>
                     <td>{t.scenario_title}</td>
                     <td>{t.level_number}</td>
-                    <td><img src={apiUrl(t.image_path)} alt="task" width="50" style={{ borderRadius: '4px' }} /></td>
+                    <td><img src={t.image_path} alt="task" width="50" style={{ borderRadius: '4px' }} /></td>
                     <td>{t.flag}</td>
                     <td>{t.time_limit}წთ</td>
                     <td>{getHintCount(t.hints)} ცალი</td>

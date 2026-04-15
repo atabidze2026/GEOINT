@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import db from '../data/defaultDb';
+import localDb from '../storage/localDb';
 
 // Helper for ephemeral progress stored in sessionStorage
 const getProgressKey = (userId, scenarioId) => `progress_${userId}_${scenarioId}`;
@@ -46,13 +46,13 @@ export default function Game() {
 
   const syncLocalGame = () => {
     const scenId = Number(scenarioId);
-    const scen = db.scenarios.find(s => s.id === scenId);
+    const scen = localDb.getScenario(scenId);
     if (!scen) {
       setStatus('empty_scenario');
       return;
     }
 
-    const tasks = db.tasks.filter(t => t.scenario_id === scenId).sort((a, b) => a.level_number - b.level_number);
+    const tasks = localDb.getTasks(scenId);
     if (tasks.length === 0) {
       setStatus('empty_scenario');
       return;

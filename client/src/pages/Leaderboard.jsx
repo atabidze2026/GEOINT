@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import db from '../data/defaultDb';
+// Offline leaderboard — no backend
 
 export default function Leaderboard() {
   const [users, setUsers] = useState([]);

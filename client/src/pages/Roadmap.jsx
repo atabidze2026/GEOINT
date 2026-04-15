@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import db from '../data/defaultDb';
+import localDb from '../storage/localDb';
 
 export default function Roadmap() {
   const [scenarios, setScenarios] = useState([]);
@@ -17,8 +17,8 @@ export default function Roadmap() {
     const username = sessionStorage.getItem('username');
     setUserData({ id: userId, username, points: 0, badges: '[]' });
 
-    // Load scenarios from local bundled data
-    setScenarios(db.scenarios || []);
+    // Load scenarios from local storage DB
+    setScenarios(localDb.getScenarios() || []);
   }, [navigate]);
 
   const handleStart = (scenarioId) => {
